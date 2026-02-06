@@ -116,6 +116,8 @@ contract DatatypesStorageSolution {
         view
         returns (address wallet, uint256 balance, bool isRegistered)
     {
+        // MISCONCEPTION: This DOES copy to memory. It does NOT persist after the call.
+        // A storage reference would modify persistent state; memory is temporary.
         User memory user = users[_wallet]; // Copy to memory before returning multiple values.
         return (user.wallet, user.balance, user.isRegistered);
     }
@@ -131,6 +133,8 @@ contract DatatypesStorageSolution {
 
     function getFirstElement(uint256[] calldata _arr) public pure returns (uint256) {
         require(_arr.length > 0, "Array is empty");
+        // MISCONCEPTION: calldata does NOT allocate memory. Zero-copy read from tx input.
+        // Calldata does NOT persist after the call. It does NOT allocate storage.
         return _arr[0]; // Calldata is zero-copy; only valid in external functions.
     }
 

@@ -24,7 +24,8 @@ contract ErrorsRevertsSolutionTest is Test {
     // ════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR TESTS
     // ════════════════════════════════════════════════════════════════════════
-    
+    // INVARIANT: owner must be set at deployment. Failure = access control broken.
+
     function test_Constructor_SetsOwner() public {
         assertEq(errors.owner(), owner);
     }
@@ -32,7 +33,8 @@ contract ErrorsRevertsSolutionTest is Test {
     // ════════════════════════════════════════════════════════════════════════
     // require() TESTS
     // ════════════════════════════════════════════════════════════════════════
-    
+    // INVARIANT: Invalid inputs must revert. Failure = logic bug or missing validation.
+
     function test_DepositWithRequire_RevertsForZeroAmount() public {
         vm.expectRevert("Amount must be positive");
         errors.depositWithRequire(0);
@@ -52,7 +54,8 @@ contract ErrorsRevertsSolutionTest is Test {
     // ════════════════════════════════════════════════════════════════════════
     // CUSTOM ERROR TESTS
     // ════════════════════════════════════════════════════════════════════════
-    
+    // INVARIANT: Custom errors must revert with correct selector. Failure = wrong error type.
+
     function test_DepositWithCustomError_RevertsForZeroAmount() public {
         vm.expectRevert(ErrorsRevertsSolution.InvalidAmount.selector);
         errors.depositWithCustomError(0);
@@ -72,7 +75,8 @@ contract ErrorsRevertsSolutionTest is Test {
     // ════════════════════════════════════════════════════════════════════════
     // WITHDRAW TESTS
     // ════════════════════════════════════════════════════════════════════════
-    
+    // INVARIANT: Cannot withdraw more than balance. Failure = security issue (over-withdraw).
+
     function test_Withdraw_RevertsForInsufficientBalance() public {
         errors.depositWithCustomError(100);
         vm.expectRevert(abi.encodeWithSelector(ErrorsRevertsSolution.InsufficientBalance.selector, 100, 200));
@@ -88,7 +92,8 @@ contract ErrorsRevertsSolutionTest is Test {
     // ════════════════════════════════════════════════════════════════════════
     // assert() TESTS
     // ════════════════════════════════════════════════════════════════════════
-    
+    // INVARIANT: totalDeposits >= balance. Failure = internal inconsistency bug.
+
     function test_CheckInvariant_WorksWhenInvariantHolds() public {
         errors.depositWithCustomError(100);
         errors.checkInvariant(); // Should not revert

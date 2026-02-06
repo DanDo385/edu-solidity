@@ -45,6 +45,7 @@ contract LowLevelCallsTest is Test {
     // ========================================
     // CALL TESTS
     // ========================================
+    // INVARIANT: call() runs in target context; target storage modified. Failure = wrong call semantics.
 
     function test_Call_BasicSuccess() public {
         (bool success, uint256 returned) = caller.callSetValue(address(target), 42);
@@ -136,6 +137,7 @@ contract LowLevelCallsTest is Test {
     // ========================================
     // DELEGATECALL TESTS
     // ========================================
+    // INVARIANT: delegatecall() runs in caller context; caller storage modified. Failure = EVM misunderstanding.
 
     function test_DelegateCall_ModifiesCallerStorage() public {
         console.log("Before delegatecall:");
@@ -236,7 +238,7 @@ contract LowLevelCallsTest is Test {
         assertEq(impl, user1, "Implementation corrupted to attacker address!");
         assertEq(owner, address(this), "Owner remains unchanged (slot 1)");
 
-        console.log("\n⚠️  ATTACK SUCCESSFUL!");
+        console.log("\n[!] ATTACK SUCCESSFUL!");
         console.log("The proxy's implementation address has been corrupted.");
         console.log("Attacker (user1) is now in slot 0 instead of implementation contract.");
         console.log("\nWhy? MaliciousImplementation has 'address owner' in slot 0,");
@@ -251,7 +253,7 @@ contract LowLevelCallsTest is Test {
         console.log("Slot 1: address owner");
 
         console.log("\nMaliciousImplementation storage:");
-        console.log("Slot 0: address owner  ⚠️ MISALIGNED!");
+        console.log("Slot 0: address owner  [!] MISALIGNED!");
 
         console.log("\nWhat happens during delegatecall:");
         console.log("1. Proxy delegates to MaliciousImpl.takeOver()");
@@ -263,20 +265,23 @@ contract LowLevelCallsTest is Test {
         console.log("\nLesson: Storage layouts MUST match in proxy patterns!");
     }
 
+    /// INVARIANT: Aligned storage layouts allow safe delegatecall. Failure = storage corruption.
     function test_SafeProxy_CorrectAlignment() public {
         console.log("\n=== SAFE PROXY DEMONSTRATION ===");
 
-        (address impl, address owner, ) = safeImpl.getValues();
+        // Read proxy storage (implementation, owner) before execution
+        address impl = safeProxy.implementation();
+        address ownerAddr = safeProxy.owner();
         console.log("\nBefore execution:");
         console.log("SafeProxy implementation:", impl);
-        console.log("SafeProxy owner:", owner);
+        console.log("SafeProxy owner:", ownerAddr);
 
-        // Execute setValue through proxy
+        // Execute setValue through proxy (delegatecalls to implementation)
         safeProxy.execute(abi.encodeWithSignature("setValue(uint256)", 888));
 
-        // Check implementation's storage via proxy
-        bytes memory data = abi.encodeWithSignature("getValues()");
-        (bool success, bytes memory returnData) = address(safeProxy).call(data);
+        // Call getValues through proxy via execute (delegatecall to implementation)
+        (bool success, bytes memory returnData) =
+            safeProxy.execute(abi.encodeWithSignature("getValues()"));
         require(success, "Call failed");
 
         (address newImpl, address newOwner, uint256 value) =
@@ -288,7 +293,7 @@ contract LowLevelCallsTest is Test {
         console.log("Value:", value);
 
         assertEq(value, 888, "Value should be set correctly");
-        console.log("\n✅ Safe because storage layouts match!");
+        console.log("\n[OK] Safe because storage layouts match!");
     }
 
     // ========================================
@@ -352,19 +357,19 @@ contract LowLevelCallsTest is Test {
     }
 
     function test_GasForwarding_63_64_Rule() public {
-        (uint256 before, uint256 after) = gasForwardingExample.demonstrateGasRule(
+        (uint256 before, uint256 afterCall) = gasForwardingExample.demonstrateGasRule(
             address(target),
             321
         );
 
         console.log("\n=== EIP-150 GAS FORWARDING (63/64 RULE) ===");
         console.log("Gas before call:", before);
-        console.log("Gas after call:", after);
-        console.log("Gas used:", before - after);
+        console.log("Gas after call:", afterCall);
+        console.log("Gas used:", before - afterCall);
         console.log("\nNote: Only 63/64 of available gas is automatically forwarded");
         console.log("The remaining 1/64 is kept for post-call execution");
 
-        assertTrue(before > after, "Gas should be consumed");
+        assertTrue(before > afterCall, "Gas should be consumed");
         assertEq(target.value(), 321, "Call should succeed");
     }
 
@@ -443,6 +448,7 @@ contract LowLevelCallsTest is Test {
         assertTrue(success, "Call to EOA should succeed");
     }
 
+    /// INVARIANT: Empty calldata invokes fallback; must succeed if contract has fallback.
     function test_EdgeCase_EmptyCallData() public {
         (bool success,) = address(target).call("");
         assertTrue(success, "Empty call should succeed");
@@ -466,13 +472,12 @@ contract LowLevelCallsTest is Test {
     // SECURITY TESTS
     // ========================================
 
+    /// INVARIANT: Call to non-existent function must fail when contract has no fallback.
+    /// Uses Caller (no fallback) not TargetContract (has fallback for empty-call tests).
     function test_Security_CheckReturnValue() public {
-        // This test demonstrates the importance of checking return values
-        (bool success,) = address(target).call(
+        (bool success,) = address(caller).call(
             abi.encodeWithSignature("nonExistentFunction()")
         );
-
-        // Call to non-existent function fails
         assertFalse(success, "Should fail when calling non-existent function");
     }
 

@@ -5,10 +5,9 @@ libs = ["../lib"]
 test = "test"
 script = "script"
 
-# Skip test files when building (they're still compiled for testing, but not included in build output)
-# This reduces clutter in the out/ directory for frontend integration
-# Skip the TODO test file, use solution test file instead
-skip = ["test/DatatypesStorage.t.sol"]
+# Both skeleton and solution test files are enabled
+# The skeleton tests validate your implementation (src/DatatypesStorage.sol)
+# The solution tests validate the reference (src/solution/DatatypesStorageSolution.sol)
 
 remappings = [
     "forge-std/=../lib/forge-std/src/"

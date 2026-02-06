@@ -920,6 +920,7 @@ The solution files (`src/solution/DatatypesStorageSolution.sol`) have been enhan
 - [ ] All tests pass (`forge test`)
 - [ ] Deployment script works locally (`forge script --broadcast`)
 - [ ] Read and understood solution contract (`src/solution/`)
+- [ ] Studied step-by-step narrative ([SOLUTION_WALKTHROUGH.md](./SOLUTION_WALKTHROUGH.md))
 - [ ] Read and understood solution script (`script/solution/`)
 - [ ] Read and understood solution tests (`test/solution/`)
 - [ ] Compared gas costs (`forge test --gas-report`)

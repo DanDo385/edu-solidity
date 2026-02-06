@@ -72,6 +72,13 @@ contract TargetContract {
     function modifyState(uint256 _value) public {
         value = _value;
     }
+
+    /**
+     * @notice Fallback for empty/low-level calls
+     * @dev Empty calldata invokes fallback; without it, call("") would revert.
+     *      Teaches that contracts can handle arbitrary calls.
+     */
+    fallback() external {}
 }
 
 /**
@@ -244,6 +251,13 @@ contract DelegateTarget {
  * @title DelegateCaller
  * @notice Demonstrates delegatecall() - executes in caller's context
  * CRITICAL: Storage layout must match DelegateTarget!
+ *
+ * MISCONCEPTION CALLOUTS (CLAUDE/.cursorrules):
+ * • delegatecall does NOT use the callee's storage. It uses OUR (caller's) storage!
+ * • delegatecall does NOT copy storage. Target's code writes directly to OUR slots.
+ * • Before delegatecall: Our slot 0 = value, slot 1 = sender.
+ * • After delegatecall(setValue(42)): Target's "value = _value" writes to OUR slot 0.
+ * • The target's storage variables are INTERPRETED as OUR slots by slot position.
  */
 contract DelegateCaller {
     uint256 public value;  // Slot 0 - MUST MATCH DelegateTarget
@@ -340,6 +354,21 @@ contract VulnerableProxy {
  * @title MaliciousImplementation
  * @notice Malicious contract with misaligned storage
  * ⚠️ FOR EDUCATIONAL PURPOSES ONLY - Shows storage corruption attack
+ *
+ * STEP-BY-STEP STORAGE CORRUPTION (memory/storage before & after):
+ * -----------------------------------------------------------------
+ * Proxy layout:  implementation (slot 0), owner (slot 1)
+ * Malicious:     owner (slot 0)  <- MISALIGNED!
+ *
+ * When proxy calls delegatecall(malicious.takeOver()):
+ * 1. BEFORE: Proxy slot 0 = implementation addr, slot 1 = owner
+ * 2. Malicious code runs IN PROXY'S CONTEXT (does NOT use malicious's storage)
+ * 3. Malicious's "owner" maps to slot 0 in proxy's storage (first state var)
+ * 4. owner = msg.sender writes msg.sender to PROXY'S slot 0
+ * 5. AFTER: Proxy slot 0 = msg.sender (attacker!), slot 1 = owner (unchanged)
+ * 6. Proxy's implementation pointer is now corrupted—attacker controls the proxy!
+ *
+ * MISCONCEPTION: delegatecall does NOT use callee storage. It uses caller storage.
  */
 contract MaliciousImplementation {
     address public owner; // Slot 0 - MISALIGNED! This is proxy's implementation slot!
@@ -347,6 +376,7 @@ contract MaliciousImplementation {
     /**
      * @notice Takes over the proxy by corrupting slot 0
      * @dev When delegatecalled, this overwrites proxy's implementation address!
+     *      The write goes to CALLER's (proxy's) slot 0, not this contract's storage.
      */
     function takeOver() public {
         owner = msg.sender; // Overwrites proxy's implementation in slot 0!

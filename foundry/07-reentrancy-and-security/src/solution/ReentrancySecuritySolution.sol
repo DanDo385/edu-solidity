@@ -24,6 +24,10 @@ contract VulnerableBank {
     }
     
     // ❌ VULNERABLE: External call before state update
+    // NOTE: We use unchecked to allow the underflow that occurs when the call stack unwinds.
+    // In Solidity 0.8+, checked math would revert on 0 - amount. Real vulnerable contracts
+    // (e.g. pre-0.8 or using unchecked) allowed this—the balance wraps and the attacker
+    // drains the bank. This preserves the teaching: CEI prevents the attack entirely.
     function withdrawVulnerable(uint256 amount) public {
         require(balances[msg.sender] >= amount, "Insufficient balance");
         
@@ -31,8 +35,10 @@ contract VulnerableBank {
         (bool success,) = msg.sender.call{value: amount}("");
         require(success, "Transfer failed");
         
-        // TOO LATE: Attacker already re-entered
-        balances[msg.sender] -= amount;
+        // TOO LATE: Attacker already re-entered. unchecked avoids underflow on unwind.
+        unchecked {
+            balances[msg.sender] -= amount;
+        }
         emit Withdrawal(msg.sender, amount);
     }
     

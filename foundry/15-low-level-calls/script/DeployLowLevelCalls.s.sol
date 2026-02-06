@@ -35,7 +35,7 @@ contract DeployLowLevelCalls is Script {
         VulnerableProxy vulnerableProxy = new VulnerableProxy(address(maliciousImpl));
         console.log("   MaliciousImplementation:", address(maliciousImpl));
         console.log("   VulnerableProxy:", address(vulnerableProxy));
-        console.log("   ⚠️  WARNING: VulnerableProxy is intentionally vulnerable!");
+        console.log("   [!] WARNING: VulnerableProxy is intentionally vulnerable!");
 
         // Deploy safe proxy contracts
         console.log("\n4. Deploying safe proxy pattern...");
@@ -43,7 +43,7 @@ contract DeployLowLevelCalls is Script {
         SafeProxy safeProxy = new SafeProxy(address(safeImpl), msg.sender);
         console.log("   SafeImplementation:", address(safeImpl));
         console.log("   SafeProxy:", address(safeProxy));
-        console.log("   ✅ Safe proxy with correct storage alignment");
+        console.log("   [OK] Safe proxy with correct storage alignment");
 
         // Deploy utility contracts
         console.log("\n5. Deploying utility contracts...");
@@ -95,7 +95,7 @@ contract DeployLowLevelCalls is Script {
         (address implAfter, address ownerAfter) = vulnerableProxy.getStorageSlots();
         console.log("  Implementation (slot 0):", implAfter);
         console.log("  Owner (slot 1):", ownerAfter);
-        console.log("  ⚠️  CORRUPTED! Implementation slot now contains:", implAfter);
+        console.log("  [!] CORRUPTED! Implementation slot now contains:", implAfter);
 
         console.log("\n=== Deployment Summary ===");
         console.log("\nKey Contracts:");
@@ -105,7 +105,7 @@ contract DeployLowLevelCalls is Script {
         console.log("- SafeProxy:", address(safeProxy));
         console.log("- VulnerableProxy:", address(vulnerableProxy), "(VULNERABLE!)");
 
-        console.log("\n⚠️  SECURITY WARNINGS:");
+        console.log("\n[!] SECURITY WARNINGS:");
         console.log("1. VulnerableProxy is INTENTIONALLY vulnerable for education");
         console.log("2. MaliciousImplementation demonstrates storage corruption");
         console.log("3. NEVER use delegatecall without matching storage layouts");

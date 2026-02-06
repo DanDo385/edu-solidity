@@ -6,16 +6,39 @@ pragma solidity ^0.8.20;
  * @notice Skeleton contract for learning functions, payable, and ETH handling
  * @dev Complete the TODOs to implement all functionality
  *
- * LEARNING GOALS:
+ * ═══════════════════════════════════════════════════════════════════════════
+ *                        PROBLEM STATEMENT
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * What are we trying to learn/build?
+ * - A minimal bank: deposit ETH, withdraw ETH, track balances per address.
+ * - Function visibility: who can call what (public, external, internal, private).
+ * - How contracts receive ETH: payable functions, receive(), fallback().
+ * - The Checks-Effects-Interactions (CEI) pattern for safe withdrawals.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *                        EVM FRAMING
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * When a call enters the contract:
+ * - msg.sender: address of the immediate caller (set by the EVM).
+ * - msg.value: wei sent with the call (in the transaction envelope).
+ * - msg.data: raw calldata (function selector + ABI-encoded args).
+ *
+ * Payable functions can receive ETH; non-payable reject value > 0.
+ * receive() runs on plain ETH (empty calldata); fallback() on unknown selectors.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *                        LEARNING GOALS
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
  * 1. Master function visibility (public, external, internal, private)
  * 2. Understand the payable modifier
  * 3. Implement receive() and fallback() functions
- * 4. Learn safe ETH transfer patterns
- * 
+ * 4. Learn safe ETH transfer patterns (CEI pattern)
+ *
  * FUN FACT: Solidity compiles to Yul and then to bytecode. Marking helpers
  * internal often lets the optimizer inline them, shaving jumps and saving gas.
- * On rollups, trimming calldata and storage writes matters even more because
- * those bytes ultimately get posted to L1 during dispute windows.
  */
 contract FunctionsPayable {
     // ============================================================
@@ -23,8 +46,10 @@ contract FunctionsPayable {
     // ============================================================
 
     // TODO: Declare a public address variable called 'owner'
+    // WHY: Access control. CONNECTION: Project 01 storage slot 0.
     address public owner;
     // TODO: Declare a mapping from address to uint256 called 'balances'
+    // WHY: Track deposits per address. CONNECTION: Project 01 mapping layout.
     mapping(address => uint256) public balances;
     // ============================================================
     // EVENTS
@@ -124,20 +149,15 @@ contract FunctionsPayable {
      * @param _amount The amount to withdraw
      */
     function withdraw(uint256 _amount) public {
-        // TODO: Implement using checks-effects-interactions pattern
-        
-        // CHECKS:
-        //   1. Require _amount > 0
-        //   2. Require balances[msg.sender] >= _amount
-        // EFFECTS:
-        //   3. Decrease balances[msg.sender] by _amount
-        // INTERACTIONS:
-        //   4. Send ETH using .call{value: _amount}("")
-        //   5. Require the call succeeded
-        //   6. Emit Withdrawn event
-        // Think of this as settling a tab: close your books before handing out cash
-        // so a reentrant caller cannot ask twice. Rollups replay these calls in
-        // fraud proofs, so deterministic ordering keeps disputes simple.
+        // TODO: Implement using checks-effects-interactions (CEI) pattern
+        // WHY: CEI prevents reentrancy. Update state BEFORE external call so
+        //      a re-entrant call sees the new balance and fails the check.
+        // INVARIANT: balances[msg.sender] must reflect all prior deposits
+        //      minus prior withdrawals. Never send ETH before updating it.
+        //
+        // CHECKS: 1) _amount > 0  2) balances[msg.sender] >= _amount
+        // EFFECTS: 3) balances[msg.sender] -= _amount
+        // INTERACTIONS: 4) msg.sender.call{value: _amount}("") 5) require success 6) emit
         require( _amount > 0, "Amount must be greater than 0"); // prevent reentrancy
         require( balances[msg.sender] >= _amount, "Insufficient balance"); // prevent reentrancy
         balances[msg.sender] -= _amount; // decrease the balance of the sender

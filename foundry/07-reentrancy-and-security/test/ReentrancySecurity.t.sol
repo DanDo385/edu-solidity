@@ -19,6 +19,8 @@ contract ReentrancySecurityTest is Test {
         victim1 = makeAddr("victim1");
         victim2 = makeAddr("victim2");
         
+        // Fund test contract for value transfers; prank changes msg.sender but value comes from caller.
+        vm.deal(address(this), 100 ether);
         vm.deal(victim1, 5 ether);
         vm.deal(victim2, 5 ether);
         
@@ -29,6 +31,8 @@ contract ReentrancySecurityTest is Test {
         vulnerableBank.deposit{value: 3 ether}();
     }
     
+    /// INVARIANT: Vulnerable bank must be drainable via reentrancy. Proves the attack vector.
+    /// Failure = implementation not vulnerable (wrong for this test) or attacker logic broken.
     function test_ReentrancyAttack_Succeeds() public {
         uint256 bankBalanceBefore = address(vulnerableBank).balance;
         console.log("Bank balance before attack:", bankBalanceBefore);
@@ -48,8 +52,12 @@ contract ReentrancySecurityTest is Test {
         assertTrue(bankBalanceAfter < bankBalanceBefore, "Bank should have lost funds");
     }
     
+    /// INVARIANT: Secure bank must reject reentrant withdraw; balance correct after normal withdraw.
+    /// Failure = CEI violated or reentrancy guard missing (security issue).
     function test_SecureBank_PreventsReentrancy() public {
-        vm.prank(victim1);
+        // SecureBank has its own balances. Use hoax to fund victim1 and set msg.sender;
+        // the call's value is taken from the pranked address when using hoax.
+        hoax(victim1, 5 ether);
         secureBank.deposit{value: 3 ether}();
         
         vm.prank(victim1);
@@ -58,6 +66,8 @@ contract ReentrancySecurityTest is Test {
         assertEq(secureBank.balances(victim1), 2 ether);
     }
     
+    /// INVARIANT: Attacker profits from vulnerable bank. Proves reentrancy drain.
+    /// Failure = attack logic wrong or vulnerable contract fixed.
     function test_VulnerableBank_LosesAllFunds() public {
         attacker = new Attacker(address(vulnerableBank));
         vm.deal(address(this), 1 ether);
