@@ -13,9 +13,6 @@ contract MockERC20 is IERC20 {
     mapping(address => uint256) public override balanceOf;
     mapping(address => mapping(address => uint256)) public override allowance;
     
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
-    
     function mint(address to, uint256 amount) external {
         totalSupply += amount;
         balanceOf[to] += amount;
@@ -45,6 +42,8 @@ contract MockERC20 is IERC20 {
 }
 
 contract ERC4626VaultTest is Test {
+    event Deposit(address indexed sender, address indexed owner, uint256 assets, uint256 shares);
+
     ERC4626VaultSolution public vault;
     MockERC20 public underlying;
     
@@ -75,6 +74,8 @@ contract ERC4626VaultTest is Test {
     // ═══════════════════════════════════════════════════════════
     
     function test_Deposit_MintsShares() public {
+        // Invariant: deposit must mint shares and increase tracked assets one-for-one at bootstrap.
+        // Failure indicates broken deposit accounting (logic) or failed asset transfer interaction.
         uint256 depositAmount = 1000e18;
         
         vm.startPrank(alice);
@@ -88,6 +89,8 @@ contract ERC4626VaultTest is Test {
     }
     
     function test_Deposit_FirstDepositor() public {
+        // Invariant: first depositor defines initial exchange rate (here 1:1).
+        // Failure indicates first-deposit edge-case math is wrong.
         vm.startPrank(alice);
         underlying.approve(address(vault), 1000e18);
         uint256 shares = vault.deposit(1000e18, alice);
@@ -98,6 +101,8 @@ contract ERC4626VaultTest is Test {
     }
     
     function test_Deposit_SubsequentDepositors() public {
+        // Invariant: with unchanged share price, equal asset deposits receive equal shares.
+        // Failure indicates conversion math drift across state transitions.
         // Alice deposits first
         vm.startPrank(alice);
         underlying.approve(address(vault), 1000e18);
@@ -115,11 +120,13 @@ contract ERC4626VaultTest is Test {
     }
     
     function test_Deposit_EmitsEvent() public {
+        // Invariant: ERC-4626 deposit path must emit canonical Deposit event data.
+        // Failure indicates integration/indexing breakage rather than arithmetic alone.
         vm.startPrank(alice);
         underlying.approve(address(vault), 100e18);
         
         vm.expectEmit(true, true, false, true);
-        emit ERC4626VaultSolution.Deposit(alice, alice, 100e18, 100e18);
+        emit Deposit(alice, alice, 100e18, 100e18);
         
         vault.deposit(100e18, alice);
         vm.stopPrank();
@@ -130,6 +137,8 @@ contract ERC4626VaultTest is Test {
     // ═══════════════════════════════════════════════════════════
     
     function test_Mint_DepositsAssets() public {
+        // Invariant: minting exact shares must pull the required assets and credit shares.
+        // Failure indicates mint path conversion or payment-flow mismatch.
         vm.startPrank(alice);
         underlying.approve(address(vault), type(uint256).max);
         uint256 assets = vault.mint(500e18, alice);
@@ -144,6 +153,8 @@ contract ERC4626VaultTest is Test {
     // ═══════════════════════════════════════════════════════════
     
     function test_Withdraw_BurnsShares() public {
+        // Invariant: withdrawing assets burns shares and returns underlying tokens.
+        // Failure indicates CEI/accounting regression in withdraw flow.
         // Setup: Alice deposits
         vm.startPrank(alice);
         underlying.approve(address(vault), 1000e18);
@@ -158,6 +169,8 @@ contract ERC4626VaultTest is Test {
     }
     
     function test_Withdraw_WithAllowance() public {
+        // Invariant: non-owner withdrawals require allowance and consume owner's shares.
+        // Failure indicates authorization or delegated-withdraw logic bug.
         // Alice deposits
         vm.startPrank(alice);
         underlying.approve(address(vault), 1000e18);
@@ -180,6 +193,8 @@ contract ERC4626VaultTest is Test {
     // ═══════════════════════════════════════════════════════════
     
     function test_Redeem_WithdrawsAssets() public {
+        // Invariant: redeeming exact shares returns corresponding assets and burns shares.
+        // Failure indicates redeem conversion/accounting inconsistency.
         vm.startPrank(alice);
         underlying.approve(address(vault), 1000e18);
         vault.deposit(1000e18, alice);
@@ -196,11 +211,15 @@ contract ERC4626VaultTest is Test {
     // ═══════════════════════════════════════════════════════════
     
     function test_ConvertToShares_FirstDeposit() public {
+        // Invariant: convertToShares on empty vault should honor bootstrap ratio.
+        // Failure indicates core conversion base case bug.
         uint256 shares = vault.convertToShares(1000e18);
         assertEq(shares, 1000e18);
     }
     
     function test_ConvertToAssets_FirstDeposit() public {
+        // Invariant: convertToAssets should invert share conversion under 1:1 state.
+        // Failure indicates conversion asymmetry.
         vm.startPrank(alice);
         underlying.approve(address(vault), 1000e18);
         vault.deposit(1000e18, alice);
@@ -215,6 +234,8 @@ contract ERC4626VaultTest is Test {
     // ═══════════════════════════════════════════════════════════
     
     function test_PreviewDeposit_MatchesActual() public {
+        // Invariant: previewDeposit must match actual deposit outcome.
+        // Failure indicates view/execute divergence (integration risk).
         uint256 previewShares = vault.previewDeposit(1000e18);
         
         vm.startPrank(alice);
@@ -226,6 +247,8 @@ contract ERC4626VaultTest is Test {
     }
     
     function test_PreviewWithdraw_MatchesActual() public {
+        // Invariant: previewWithdraw must equal actual shares burned in withdraw.
+        // Failure indicates rounding or preview implementation mismatch.
         vm.startPrank(alice);
         underlying.approve(address(vault), 1000e18);
         vault.deposit(1000e18, alice);
@@ -242,6 +265,8 @@ contract ERC4626VaultTest is Test {
     // ═══════════════════════════════════════════════════════════
     
     function test_MaxWithdraw_ReturnsBalance() public {
+        // Invariant: maxWithdraw should map owner's share balance into withdrawable assets.
+        // Failure indicates max-limit reporting bug for frontends and routers.
         vm.startPrank(alice);
         underlying.approve(address(vault), 1000e18);
         vault.deposit(1000e18, alice);
@@ -252,6 +277,8 @@ contract ERC4626VaultTest is Test {
     }
     
     function test_MaxRedeem_ReturnsShares() public {
+        // Invariant: maxRedeem should equal current share balance.
+        // Failure indicates incorrect redeem-limit surface API.
         vm.startPrank(alice);
         underlying.approve(address(vault), 1000e18);
         vault.deposit(1000e18, alice);
@@ -266,6 +293,8 @@ contract ERC4626VaultTest is Test {
     // ═══════════════════════════════════════════════════════════
     
     function test_MultipleUsersDepositAndWithdraw() public {
+        // Invariant: aggregate accounting across multiple users must net back to zero after full exits.
+        // Failure indicates cumulative accounting leak or share conservation violation.
         // Alice deposits
         vm.startPrank(alice);
         underlying.approve(address(vault), 1000e18);
@@ -288,14 +317,17 @@ contract ERC4626VaultTest is Test {
         assertEq(vault.totalAssets(), 3500e18);
         
         // Each withdraws
+        uint256 aliceShares = vault.balanceOf(alice);
         vm.prank(alice);
-        vault.redeem(vault.balanceOf(alice), alice, alice);
+        vault.redeem(aliceShares, alice, alice);
         
+        uint256 bobShares = vault.balanceOf(bob);
         vm.prank(bob);
-        vault.redeem(vault.balanceOf(bob), bob, bob);
+        vault.redeem(bobShares, bob, bob);
         
+        uint256 carolShares = vault.balanceOf(carol);
         vm.prank(carol);
-        vault.redeem(vault.balanceOf(carol), carol, carol);
+        vault.redeem(carolShares, carol, carol);
         
         // Vault should be empty
         assertEq(vault.totalAssets(), 0);
@@ -307,6 +339,8 @@ contract ERC4626VaultTest is Test {
     // ═══════════════════════════════════════════════════════════
     
     function testFuzz_DepositWithdraw(uint96 amount) public {
+        // Invariant (fuzz): deposit then full redeem should round-trip assets for tested domain.
+        // Failure indicates hidden arithmetic or state-transition edge cases.
         vm.assume(amount > 0 && amount <= 10000e18);
         
         vm.startPrank(alice);

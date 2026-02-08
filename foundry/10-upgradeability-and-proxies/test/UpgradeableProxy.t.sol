@@ -5,13 +5,13 @@ import "forge-std/Test.sol";
 import "../src/solution/UpgradeableProxySolution.sol";
 
 contract UpgradeableProxyTest is Test {
-    UUPSProxy public proxy;
+    UpgradeableProxySolution public proxy;
     ImplementationV1 public implV1;
     ImplementationV2 public implV2;
     
     function setUp() public {
         implV1 = new ImplementationV1();
-        proxy = new UUPSProxy(address(implV1));
+        proxy = new UpgradeableProxySolution(address(implV1));
     }
     
     function test_Proxy_DelegatesToImplementation() public {

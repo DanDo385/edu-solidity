@@ -26,7 +26,6 @@ interface IERC20 {
  * - Project 06: Running totals pattern for total assets/shares
  * 
  * CORE MATH: shares = (assets * totalShares) / totalAssets (proportional minting)
- */
  *
  * shares = (assets * totalSupply) / totalAssets
  * assets = (shares * totalAssets) / totalSupply
@@ -43,8 +42,8 @@ interface IERC20 {
  * ══════════════════════════════════
  *
  * ⚠️  CRITICAL: Always round in favor of the vault (never favor users):
- * - deposit/mint: Round DOWN shares given to user
- * - withdraw/redeem: Round UP shares taken from user
+ * - deposit/redeem: Round DOWN when computing user-facing output
+ * - mint/withdraw: Round UP when computing user-required input
  *
  * Why? Prevents attackers from exploiting rounding to drain vault!
  *
@@ -267,6 +266,7 @@ contract ERC4626VaultSolution {
      *      This prevents donation attacks where someone sends assets directly!
      */
     function deposit(uint256 assets, address receiver) public nonReentrant returns (uint256 shares) {
+        // CHECKS: validate caller intent and basic inputs before any state change.
         require(receiver != address(0), "Invalid receiver");
         require(assets > 0, "Zero assets");
         
@@ -277,11 +277,15 @@ contract ERC4626VaultSolution {
         shares = convertToShares(assets); // ~200 gas
         require(shares > 0, "Zero shares");
         
-        // 💾 TRANSFER ASSETS: From sender to vault
+        // INTERACTION: pull assets first so shares are never minted without payment.
+        // This placement is acceptable because `nonReentrant` blocks callback reentry and
+        // no vault accounting has been credited yet.
         // CONNECTION TO PROJECT 08: ERC20 transferFrom!
         // User must approve vault first (ERC20 approval pattern)
         require(asset.transferFrom(msg.sender, address(this), assets), "Transfer failed"); // ~11,700 gas
         
+        // EFFECTS: now commit accounting and mint shares after successful transfer.
+        // These writes define the new shares<->assets state for future conversions.
         // 💾 UPDATE ACCOUNTING: Track deposited assets
         // CONNECTION TO PROJECT 01: Storage write!
         // We track internally to prevent donation attacks
@@ -304,15 +308,19 @@ contract ERC4626VaultSolution {
      * @return assets Amount of assets deposited
      */
     function mint(uint256 shares, address receiver) public nonReentrant returns (uint256 assets) {
+        // CHECKS: reject invalid receivers and zero-share requests.
         require(receiver != address(0), "Invalid receiver");
         require(shares > 0, "Zero shares");
         
         // Calculate assets needed (round up to favor vault)
         assets = previewMint(shares);
         
+        // INTERACTION: collect required assets before minting requested shares.
+        // This is safe with `nonReentrant`, and prevents underfunded share minting.
         // Transfer assets from sender
         require(asset.transferFrom(msg.sender, address(this), assets), "Transfer failed");
         
+        // EFFECTS: write vault accounting and share balances after successful asset pull.
         // Update accounting
         _totalAssets += assets;
         
@@ -334,6 +342,7 @@ contract ERC4626VaultSolution {
         nonReentrant 
         returns (uint256 shares) 
     {
+        // CHECKS: validate receiver/amount and authorization up front.
         require(receiver != address(0), "Invalid receiver");
         require(assets > 0, "Zero assets");
         
@@ -349,12 +358,16 @@ contract ERC4626VaultSolution {
             }
         }
         
+        // EFFECTS: burn shares and decrement tracked assets before external transfer.
+        // This ordering is the safer CEI variant for withdrawals: state is already reduced
+        // if the ERC20 transfer path attempts any callback behavior.
         // Burn shares from owner
         _burn(owner, shares);
         
         // Update accounting
         _totalAssets -= assets;
         
+        // INTERACTION: external token transfer happens after internal state effects.
         // Transfer assets to receiver
         require(asset.transfer(receiver, assets), "Transfer failed");
         
@@ -373,10 +386,12 @@ contract ERC4626VaultSolution {
         nonReentrant 
         returns (uint256 assets) 
     {
+        // CHECKS: validate receiver/input and enforce spender allowance rules.
         require(receiver != address(0), "Invalid receiver");
         require(shares > 0, "Zero shares");
         
-        // Calculate assets to withdraw (round down to favor vault)
+        // Redeem returns assets for exact shares, so output rounds DOWN to favor vault.
+        // Users provide the exact shares burned; vault never overpays assets on truncation.
         assets = convertToAssets(shares);
         
         // Handle allowance if not owner
@@ -388,12 +403,15 @@ contract ERC4626VaultSolution {
             }
         }
         
+        // EFFECTS: burn shares and reduce tracked assets before any external transfer.
+        // This keeps accounting conservative even if token transfer unexpectedly reverts/callbacks.
         // Burn shares from owner
         _burn(owner, shares);
         
         // Update accounting
         _totalAssets -= assets;
         
+        // INTERACTION: transfer happens last after vault state has been updated.
         // Transfer assets to receiver
         require(asset.transfer(receiver, assets), "Transfer failed");
         
@@ -470,7 +488,7 @@ contract ERC4626VaultSolution {
     
     /**
      * @notice Round up division
-     * @dev Helper for rounding UP (used in withdraw/redeem)
+     * @dev Helper for rounding UP (used in mint/withdraw preview math)
      *      Formula: (x + y - 1) / y
      *      Example: _divUp(10, 3) = (10 + 3 - 1) / 3 = 12 / 3 = 4
      *      Standard: 10 / 3 = 3 (rounds down)
@@ -499,8 +517,8 @@ contract ERC4626VaultSolution {
  *    ✅ Shares become more valuable over time!
  *
  * 3. ROUNDING ALWAYS FAVORS VAULT
- *    ✅ Deposit/mint: Round DOWN shares given to user
- *    ✅ Withdraw/redeem: Round UP shares taken from user
+ *    ✅ Deposit/redeem outputs round DOWN to avoid over-crediting users
+ *    ✅ Mint/withdraw previews round UP when computing required input from user
  *    ✅ Prevents attackers from exploiting rounding
  *    ✅ Standard practice in DeFi vaults
  *

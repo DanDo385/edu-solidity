@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 /**
- * @title UUPSProxy
+ * @title UpgradeableProxySolution
  * @notice UUPS proxy pattern enabling contract upgradeability
  * 
  * PURPOSE: Separate logic (upgradeable) from state (persistent) - enables bug fixes/upgrades
@@ -14,12 +14,11 @@ pragma solidity ^0.8.20;
  * - Project 04: Access control for upgrades
  * 
  * HOW IT WORKS: User → Proxy fallback() → delegatecall → Implementation → State in proxy
- */
  *
  * Delegatecall executes code from another contract in current contract's context.
  * This is THE key mechanism that makes proxies work!
  */
-contract UUPSProxy {
+contract UpgradeableProxySolution {
     // ════════════════════════════════════════════════════════════════════════
     // EIP-1967 STORAGE SLOTS
     // ════════════════════════════════════════════════════════════════════════
@@ -37,7 +36,7 @@ contract UUPSProxy {
      *      CONNECTION TO PROJECT 01: Storage slot calculation!
      *      Uses keccak256 just like mapping storage slots
      */
-    bytes32 private constant IMPLEMENTATION_SLOT = 
+    bytes32 private immutable implementationSlot = 
         bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
     
     /**
@@ -45,7 +44,7 @@ contract UUPSProxy {
      * @dev Calculated as: keccak256("eip1967.proxy.admin") - 1
      *      Stores who can upgrade the implementation
      */
-    bytes32 private constant ADMIN_SLOT =
+    bytes32 private immutable adminSlot =
         bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
     
     // ════════════════════════════════════════════════════════════════════════
@@ -110,7 +109,7 @@ contract UUPSProxy {
     function _setImplementation(address newImplementation) private {
         require(newImplementation.code.length > 0, "Not a contract");
         assembly {
-            sstore(IMPLEMENTATION_SLOT, newImplementation)
+            sstore(implementationSlot, newImplementation)
         }
     }
     
@@ -126,7 +125,7 @@ contract UUPSProxy {
      */
     function _setAdmin(address newAdmin) private {
         assembly {
-            sstore(ADMIN_SLOT, newAdmin)
+            sstore(adminSlot, newAdmin)
         }
     }
 
@@ -146,7 +145,7 @@ contract UUPSProxy {
      */
     function implementation() public view returns (address impl) {
         assembly {
-            impl := sload(IMPLEMENTATION_SLOT)
+            impl := sload(implementationSlot)
         }
     }
     
@@ -161,7 +160,7 @@ contract UUPSProxy {
      */
     function admin() public view returns (address adm) {
         assembly {
-            adm := sload(ADMIN_SLOT)
+            adm := sload(adminSlot)
         }
     }
 

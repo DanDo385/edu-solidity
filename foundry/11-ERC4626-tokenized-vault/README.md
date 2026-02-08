@@ -21,19 +21,16 @@ By completing this project, you will:
 ```
 11-ERC4626-tokenized-vault/
 ├── README.md                          # This file
+├── SOLUTION_WALKTHROUGH.md            # Step-by-step solution explanation
 ├── foundry.toml                       # Foundry configuration
 ├── src/
 │   ├── ERC4626Vault.sol              # Skeleton contract (TODO: implement)
 │   └── solution/
 │       └── ERC4626VaultSolution.sol  # Complete reference implementation
 ├── script/
-│   ├── DeployERC4626Vault.s.sol      # Deployment script (TODO: implement)
-│   └── solution/
-│       └── DeployERC4626VaultSolution.s.sol  # Reference deployment
+│   └── DeployERC4626Vault.s.sol      # Deployment script
 └── test/
-    ├── ERC4626Vault.t.sol            # Test suite (TODO: implement)
-    └── solution/
-        └── ERC4626VaultSolution.t.sol  # Reference tests
+    └── ERC4626Vault.t.sol            # Test suite
 ```
 
 ## 🔑 Key Concepts
